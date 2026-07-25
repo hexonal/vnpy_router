@@ -25,7 +25,7 @@ import threading
 
 from vnpy.event import Event, EventEngine
 from vnpy.trader.converter import OffsetConverter
-from vnpy.trader.engine import BaseEngine, MainEngine
+from vnpy.trader.engine import BaseEngine, MainEngine, OmsEngine
 from vnpy.trader.event import EVENT_CONTRACT
 from vnpy.trader.object import (
     ContractData,
@@ -134,7 +134,13 @@ class RouterEngine(BaseEngine):
         # A trade gateway using SuppressContractMixin pushes no contracts, so
         # OmsEngine never builds its OffsetConverter — create it explicitly so
         # convert_order_request works for trade-gateway orders.
+        # engines[] is typed BaseEngine, so both the attribute access and
+        # OffsetConverter's parameter need the concrete OmsEngine. Assert rather
+        # than cast: if vnpy ever stops registering an OmsEngine under "oms",
+        # silently proceeding would leave orders unconvertible at trade time.
         oms = self.main_engine.engines["oms"]
+        if not isinstance(oms, OmsEngine):
+            raise RouterConfigError(f"MainEngine 的 'oms' 引擎不是 OmsEngine: {type(oms).__name__}")
         oms.offset_converters.setdefault(self.trade_gateway, OffsetConverter(oms))
 
     # ------------------------------------------------------------------

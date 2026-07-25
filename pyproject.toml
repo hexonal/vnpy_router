@@ -11,3 +11,12 @@ dependencies = ["vnpy>=4.0.0"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["vnpy_router"]
+
+# Point pyright at the shared VeighNa virtualenv. Without it, every vnpy import
+# resolves against the system interpreter and reports as unresolved, burying the
+# real diagnostics. Relative so it travels with the checkout: this package sits
+# beside the vnpy fork that owns the venv.
+[tool.pyright]
+venvPath = ".."
+venv = "vnpy/.venv"
+typeCheckingMode = "standard"
