@@ -10,7 +10,7 @@ from collections.abc import Iterator
 
 import pytest
 
-from vnpy.event import Event, EventEngine
+from vnpy.event import EventEngine
 from vnpy.trader.constant import Exchange
 from vnpy.trader.engine import MainEngine
 from vnpy.trader.event import EVENT_CONTRACT
@@ -30,10 +30,17 @@ class RecordingFakeGateway(BaseGateway):
     """Records every routing call; pushes contracts/bars on demand."""
 
     default_name = "FAKE"
-    exchanges = [Exchange.SEHK, Exchange.SMART, Exchange.NASDAQ]
 
     def __init__(self, event_engine: EventEngine, gateway_name: str) -> None:
         super().__init__(event_engine, gateway_name)
+        # BaseGateway declares `exchanges: list[Exchange] = []` as an *instance*
+        # variable with a class-level default, and MainEngine.add_gateway reads
+        # it off the constructed instance. Set it per-instance rather than as a
+        # class attribute: a class-level mutable list is shared state (ruff
+        # RUF012), and re-declaring it ClassVar would be an incompatible
+        # override of the base's instance variable (mypy misc / pyright
+        # reportIncompatibleVariableOverride).
+        self.exchanges: list[Exchange] = [Exchange.SEHK, Exchange.SMART, Exchange.NASDAQ]
         self.subscribed: list[SubscribeRequest] = []
         self.orders: list[OrderRequest] = []
         self.cancels: list[CancelRequest] = []
@@ -72,7 +79,7 @@ class RecordingFakeGateway(BaseGateway):
         ))
 
 
-@pytest.fixture()
+@pytest.fixture
 def event_engine() -> Iterator[EventEngine]:
     # Do NOT start here — MainEngine.__init__ starts it (starting twice raises
     # "threads can only be started once"). Tests that use the engine without a
@@ -83,14 +90,14 @@ def event_engine() -> Iterator[EventEngine]:
         ee.stop()
 
 
-@pytest.fixture()
+@pytest.fixture
 def main_engine(event_engine: EventEngine) -> Iterator[MainEngine]:
     me = MainEngine(event_engine)   # starts the event engine
     yield me
     me.close()                      # stops the event engine
 
 
-@pytest.fixture()
+@pytest.fixture
 def gateways(main_engine: MainEngine) -> dict[str, RecordingFakeGateway]:
     """Register FUTU (quote) + IB (trade); return both by name."""
     futu = main_engine.add_gateway(RecordingFakeGateway, "FUTU")
@@ -98,7 +105,7 @@ def gateways(main_engine: MainEngine) -> dict[str, RecordingFakeGateway]:
     return {"FUTU": futu, "IB": ib}
 
 
-@pytest.fixture()
+@pytest.fixture
 def routing_config(monkeypatch, tmp_path) -> None:
     """Redirect routing_setting.json to a temp file with FUTU/IB."""
     cfg = tmp_path / "routing_setting.json"
@@ -106,7 +113,7 @@ def routing_config(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr("vnpy_router.engine.get_file_path", lambda name: cfg)
 
 
-@pytest.fixture()
+@pytest.fixture
 def contract_events(event_engine: EventEngine) -> list[ContractData]:
     """Every EVENT_CONTRACT the bus sees (for backstop no-loop assertions)."""
     seen: list[ContractData] = []

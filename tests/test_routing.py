@@ -18,10 +18,16 @@ from vnpy.trader.object import (
     SubscribeRequest,
 )
 
-from vnpy_gatewaykit import SuppressContractMixin
+from vnpy_gatewaykit import SuppressContractMixin, market_tz
 from vnpy_router import RouterConfigError, RouterEngine
 
 from tests.conftest import RecordingFakeGateway
+
+# Every fixture instrument below is 700.SEHK, so its bars/history windows are
+# stamped in the SEHK market's own timezone (Asia/Hong_Kong) — not the machine's
+# (this project runs on US Pacific, where a naive datetime would be read ~15h
+# off). Same source of truth the gateways localize feed timestamps with.
+_SEHK_TZ = market_tz(Exchange.SEHK)
 
 
 def _sub() -> SubscribeRequest:
@@ -50,13 +56,13 @@ def test_subscribe_forced_to_quote(main_engine, gateways, routing_config) -> Non
 def test_query_history_forced_to_quote(main_engine, gateways, routing_config) -> None:
     gateways["FUTU"].history_result = [
         BarData(gateway_name="FUTU", symbol="700", exchange=Exchange.SEHK,
-                datetime=datetime(2026, 7, i + 1), interval=Interval.DAILY,
+                datetime=datetime(2026, 7, i + 1, tzinfo=_SEHK_TZ), interval=Interval.DAILY,
                 open_price=1, high_price=1, low_price=1, close_price=1, volume=1)
         for i in range(3)
     ]
     _add_router(main_engine)
     req = HistoryRequest(symbol="700", exchange=Exchange.SEHK, interval=Interval.DAILY,
-                         start=datetime(2026, 7, 1))
+                         start=datetime(2026, 7, 1, tzinfo=_SEHK_TZ))
     bars = main_engine.query_history(req, "IB")
     assert len(bars) == 3
     assert gateways["IB"].history_calls == []
