@@ -22,6 +22,7 @@ from vnpy.trader.object import (
     HistoryRequest,
     OrderRequest,
     Product,
+    QuoteRequest,
     SubscribeRequest,
 )
 
@@ -44,6 +45,8 @@ class RecordingFakeGateway(BaseGateway):
         self.subscribed: list[SubscribeRequest] = []
         self.orders: list[OrderRequest] = []
         self.cancels: list[CancelRequest] = []
+        self.quotes: list[QuoteRequest] = []
+        self.quote_cancels: list[CancelRequest] = []
         self.history_calls: list[HistoryRequest] = []
         self.history_result: list[BarData] = []
 
@@ -61,6 +64,18 @@ class RecordingFakeGateway(BaseGateway):
 
     def cancel_order(self, req: CancelRequest) -> None:
         self.cancels.append(req)
+
+    # BaseGateway.send_quote/cancel_quote are concrete no-ops (gateway.py:228-252),
+    # so an unrouted quote would be swallowed silently rather than raise —
+    # record them to make the routing observable.
+    def send_quote(self, req: QuoteRequest) -> str:
+        self.quotes.append(req)
+        quote = req.create_quote_data(str(len(self.quotes)), self.gateway_name)
+        self.on_quote(quote)
+        return quote.vt_quoteid
+
+    def cancel_quote(self, req: CancelRequest) -> None:
+        self.quote_cancels.append(req)
 
     def query_history(self, req: HistoryRequest) -> list[BarData]:
         self.history_calls.append(req)
