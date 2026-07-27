@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # 私有兄弟包要 token 才装得到。没有 token 时只跑 lint —— 那一步不需要装依赖。
+  HAS_TOKEN: ${{ secrets.VNPY_CI_TOKEN != '' }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install lint tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff
+
+      # lint 不需要装任何依赖，所以永远跑得了 —— 没有 token 时它就是全部保障。
+      - name: Lint
+        run: ruff check .
+
+      - name: Checkout private siblings
+        if: env.HAS_TOKEN == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: hexonal/vnpy_gatewaykit
+          path: _deps/vnpy_gatewaykit
+          token: ${{ secrets.VNPY_CI_TOKEN }}
+
+      - name: Install package
+        if: env.HAS_TOKEN == 'true'
+        run: |
+          pip install mypy pytest
+          # tests/test_run_gui_wiring.py 按 run_gui.py 的真实装载顺序接线，
+          # 需要这两个 vnpy 官方 app（PyPI 公开包，不是私有兄弟仓）。
+          # 它们只在测试里用到，所以不进 pyproject 的 dependencies。
+          pip install vnpy_paperaccount vnpy_riskmanager
+          pip install -e _deps/vnpy_gatewaykit
+          pip install -e .
+
+      - name: Type check
+        if: env.HAS_TOKEN == 'true'
+        run: mypy --strict vnpy_router
+
+      # 这一步是本 workflow 存在的主要理由：vnpy 与 vnpy_ctastrategy 的既有 CI
+      # 只跑 ruff/mypy/build，一个用例都不执行。
+      #
+      # 不需要 QT_QPA_PLATFORM=offscreen：实测导入 vnpy.trader.engine /
+      # vnpy_gatewaykit / vnpy_paperaccount / vnpy_riskmanager / vnpy_router
+      # 之后 sys.modules 里没有任何 PySide6 或 vnpy.trader.ui 模块 —— UI 组件由
+      # MainWindow 惰性载入，本仓的测试从不构造它。
+      - name: Test
+        if: env.HAS_TOKEN == 'true'
+        run: pytest tests -q
+
+      - name: Notice when siblings are unavailable
+        if: env.HAS_TOKEN != 'true'
+        run: |
+          echo "::notice::未配置 VNPY_CI_TOKEN，本轮只跑了 lint。"
+          echo "::notice::类型检查与测试需要读取私有兄弟仓(vnpy_gatewaykit 等)，"
+          echo "::notice::请创建一个对 hexonal/vnpy_* 有 Contents:read 权限的"
+          echo "::notice::fine-grained PAT，存为仓库 secret VNPY_CI_TOKEN。"

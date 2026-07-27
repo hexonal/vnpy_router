@@ -20,3 +20,18 @@ packages = ["vnpy_router"]
 venvPath = ".."
 venv = "vnpy/.venv"
 typeCheckingMode = "standard"
+
+# 显式钉住 lint 目标版本，不要落到仓外去找配置。
+#
+# 没有这一段时 ruff 会沿目录树往上找，在开发机上读到
+# /Users/flink/tradingview/pyproject.toml（那份 requires-python 是 >=3.12），
+# 而 CI 里根本没有那个父目录 —— 同一份代码于是在两处得到不同诊断。
+# 方向也危险：py312 下 UP017 会建议把 timezone.utc 换成 datetime.UTC，
+# 而后者是 CPython 3.11 才有的，本仓 requires-python 是 >=3.10，
+# 照做会让包在它自己声称支持的最老解释器上 import 就崩。
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "B", "SIM", "UP", "I"]

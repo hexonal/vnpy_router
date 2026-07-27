@@ -7,7 +7,6 @@ import time
 from datetime import datetime
 
 import pytest
-
 from vnpy.trader.constant import Direction, Exchange, Interval, Offset, OrderType
 from vnpy.trader.event import EVENT_LOG
 from vnpy.trader.object import (
@@ -17,11 +16,10 @@ from vnpy.trader.object import (
     OrderRequest,
     SubscribeRequest,
 )
-
 from vnpy_gatewaykit import SuppressContractMixin, market_tz
-from vnpy_router import RouterConfigError, RouterEngine
 
 from tests.conftest import RecordingFakeGateway
+from vnpy_router import RouterConfigError, RouterEngine
 
 # Every fixture instrument below is 700.SEHK, so its bars/history windows are
 # stamped in the SEHK market's own timezone (Asia/Hong_Kong) — not the machine's
@@ -68,7 +66,9 @@ def test_query_history_forced_to_quote(main_engine, gateways, routing_config) ->
     assert gateways["IB"].history_calls == []
 
 
-def test_send_order_forced_to_trade_with_warn(main_engine, gateways, routing_config, event_engine) -> None:
+def test_send_order_forced_to_trade_with_warn(
+    main_engine, gateways, routing_config, event_engine
+) -> None:
     logs: list = []
     event_engine.register(EVENT_LOG, lambda e: logs.append(e.data.msg))
     _add_router(main_engine)
@@ -81,7 +81,9 @@ def test_send_order_forced_to_trade_with_warn(main_engine, gateways, routing_con
     assert any("强制改向" in m and "IB" in m for m in logs)
 
 
-def test_send_order_no_warn_when_correct(main_engine, gateways, routing_config, event_engine) -> None:
+def test_send_order_no_warn_when_correct(
+    main_engine, gateways, routing_config, event_engine
+) -> None:
     logs: list = []
     event_engine.register(EVENT_LOG, lambda e: logs.append(e.data.msg))
     _add_router(main_engine)
@@ -94,7 +96,9 @@ def test_send_order_no_warn_when_correct(main_engine, gateways, routing_config, 
 def test_cancel_order_follows_order_gateway(main_engine, gateways, routing_config) -> None:
     _add_router(main_engine)
     # cancel_order is NOT patched — MainEngine routes by the gateway_name given.
-    main_engine.cancel_order(CancelRequest(orderid="20260723-001", symbol="700", exchange=Exchange.SEHK), "IB")
+    main_engine.cancel_order(
+        CancelRequest(orderid="20260723-001", symbol="700", exchange=Exchange.SEHK), "IB"
+    )
     assert len(gateways["IB"].cancels) == 1
     assert gateways["IB"].cancels[0].orderid == "20260723-001"
     assert gateways["FUTU"].cancels == []
