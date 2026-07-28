@@ -13,9 +13,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  # 私有兄弟包要 token 才装得到。没有 token 时只跑 lint —— 那一步不需要装依赖。
-  HAS_TOKEN: ${{ secrets.VNPY_CI_TOKEN != '' }}
 
 jobs:
   check:
@@ -33,20 +30,20 @@ jobs:
           python -m pip install --upgrade pip
           pip install ruff
 
-      # lint 不需要装任何依赖，所以永远跑得了 —— 没有 token 时它就是全部保障。
+      # lint 排在装依赖之前：它不需要任何依赖，装依赖失败时仍能给出信号。
       - name: Lint
         run: ruff check .
 
-      - name: Checkout private siblings
-        if: env.HAS_TOKEN == 'true'
+      # 兄弟仓已全部公开，checkout 用 runner 自带的 GITHUB_TOKEN 即可，
+      # 不再需要人工配 PAT。private 时代的 HAS_TOKEN 门禁已移除 ——
+      # 那道门禁的代价是所有测试被 skip，绿灯只代表 lint 过。
+      - name: Checkout sibling repos
         uses: actions/checkout@v7
         with:
           repository: hexonal/vnpy_gatewaykit
           path: _deps/vnpy_gatewaykit
-          token: ${{ secrets.VNPY_CI_TOKEN }}
 
       - name: Install package
-        if: env.HAS_TOKEN == 'true'
         run: |
           pip install mypy pytest
           # tests/test_run_gui_wiring.py 按 run_gui.py 的真实装载顺序接线，
@@ -57,7 +54,6 @@ jobs:
           pip install -e .
 
       - name: Type check
-        if: env.HAS_TOKEN == 'true'
         run: mypy --strict vnpy_router
 
       # 这一步是本 workflow 存在的主要理由：vnpy 与 vnpy_ctastrategy 的既有 CI
@@ -68,13 +64,5 @@ jobs:
       # 之后 sys.modules 里没有任何 PySide6 或 vnpy.trader.ui 模块 —— UI 组件由
       # MainWindow 惰性载入，本仓的测试从不构造它。
       - name: Test
-        if: env.HAS_TOKEN == 'true'
         run: pytest tests -q
 
-      - name: Notice when siblings are unavailable
-        if: env.HAS_TOKEN != 'true'
-        run: |
-          echo "::notice::未配置 VNPY_CI_TOKEN，本轮只跑了 lint。"
-          echo "::notice::类型检查与测试需要读取私有兄弟仓(vnpy_gatewaykit 等)，"
-          echo "::notice::请创建一个对 hexonal/vnpy_* 有 Contents:read 权限的"
-          echo "::notice::fine-grained PAT，存为仓库 secret VNPY_CI_TOKEN。"
