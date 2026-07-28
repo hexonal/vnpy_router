@@ -34,6 +34,17 @@ jobs:
       - name: Lint
         run: ruff check .
 
+      # 必须装我们的 fork，不能用 PyPI 的上游 vnpy。fork 与 4.4.0 有语义差异，
+      # 而本仓代码是按 fork 写的 —— 例如 BaseGateway.default_setting 在 fork 里是
+      # dict[str, str|int|float|bool|list]（list 用于下拉选项），上游没有 list，
+      # 于是 mypy 报 Incompatible types；vnpy/alpha 的 active_orderids 修复
+      # (cdf2bc7b) 同样只在 fork 里，缺了它 alphakit 的用例会红。
+      - name: Checkout vnpy fork
+        uses: actions/checkout@v7
+        with:
+          repository: hexonal/vnpy
+          path: _deps/vnpy
+
       # 兄弟仓已全部公开，checkout 用 runner 自带的 GITHUB_TOKEN 即可，
       # 不再需要人工配 PAT。private 时代的 HAS_TOKEN 门禁已移除 ——
       # 那道门禁的代价是所有测试被 skip，绿灯只代表 lint 过。
@@ -46,6 +57,7 @@ jobs:
       - name: Install package
         run: |
           pip install mypy pytest
+          pip install -e ./_deps/vnpy
           # tests/test_run_gui_wiring.py 按 run_gui.py 的真实装载顺序接线，
           # 需要这两个 vnpy 官方 app（PyPI 公开包，不是私有兄弟仓）。
           # 它们只在测试里用到，所以不进 pyproject 的 dependencies。
